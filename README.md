@@ -1,2 +1,3 @@
-# data mining
-存放数据挖掘作业及项目
+# Data Mining
+
+数据挖掘课程项目
