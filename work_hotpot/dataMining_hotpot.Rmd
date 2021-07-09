@@ -1,0 +1,341 @@
+---
+title: "<center>**数据挖掘 第五次作业**<center/>"
+author: "<center>**邓淇升** **16307110232** **大数据学院**<center/>"
+date: "<center>15 Apr 2019<center/>"
+output: 
+    html_document:
+        toc: yes
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "F:\\复旦大学\\课程课件\\新大二下学期\\1 数据挖掘\\Homework\\第5次作业")
+```
+
+<br/>
+
+## **TASK 0**
+
+　　在数据分析之前，先进行环境设置等准备工作。
+
+```{r, message = F, warning = F}
+## 清空命令行窗口
+cat('\014')
+
+## 清空工作变量
+rm(list = ls())
+
+## 加载所需的包
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(gridExtra)
+library(MASS)
+library(plyr)
+library(pROC)
+library(RColorBrewer)
+library(ROCR)
+library(Rwordseg)
+library(scales)
+library(stringr)
+library(tm)
+library(wordcloud2)
+
+## 设置系统工作路径
+setwd('F:\\复旦大学\\课程课件\\新大二下学期\\1 数据挖掘\\Homework\\第5次作业')
+
+## 设置字体样式
+windowsFonts(chineseFont = windowsFont('等线'))
+windowsFonts(mathFont = windowsFont('Calibri'))
+```
+
+<br/>
+
+## **TASK 1**
+
+　　读入火锅团购资料的数据集，修改数据类型，查看数据记录的基本情况。观察发现，数据集中已经预设好分类变量，建立回归模型时可以直接提取使用。
+
+```{r, message = F, warning = F}
+## 读入数据集hot.pot
+hot.pot <- read.csv('HotPotForMac.csv', header = T, fileEncoding = 'UTF-8')
+
+## 设置“字段1”和“字段2”的数据格式为字符
+hot.pot$'字段1' <- as.character(hot.pot$'字段1')
+hot.pot$'字段2' <- as.character(hot.pot$'字段2')
+
+## 修改字段名称为商家店名和附加信息
+names(hot.pot)[2:3] <- c('merchant.name', 'additional.information')
+
+## 查看数据记录情况
+summary(hot.pot)
+```
+
+<br/>
+
+## **TASK 2**
+
+　　将数据集中的团购季均销量进行对数处理，由于存在季均销量为0的情况，处理时采用公式log(季均销量+1)进行对数化。观察发现，数据呈左偏趋势，即对数季均销量绝大部分小于5，市场水平位于1左右，转换为季均销量即为：绝大部分销量小于150，市场水平大致为2~3，正因为如此，若使用季均销量进行分析会导致数据大量落在0上，故需采用对数进行扁平化。这说明火锅团购的行情并不十分强劲，的确存在部分火锅店比较热门，售得较大量的团购券，但大部分商家仅为“小本经营”，不足以与大商家抗衡。这一点从季均销量的基本统计量中可以看出，季均销量的中位数约为9，但平均值约为224，如此大的差距表明了火锅市场分化比较悬殊，最大销量甚至达到了季均25941次，但却存在276家火锅店的销量为0。
+
+```{r, message = F, warning = T, fig.align = 'center'}
+## 将季均销量转换为对数季均销量log.quarterly.sales.volume
+hot.pot$log.quarterly.sales.volume <- log(hot.pot$quarterly.sales.volume + 1)
+
+## 绘制对数季均销量的分布直方图
+ggplot(hot.pot, aes(log.quarterly.sales.volume)) +
+    geom_histogram(bins = 12, binwidth = 1, fill = '#FFBFBF', color = '#FF7F7F') +
+    labs(x = '对数(季均销量 + 1)', y = '频数', title ='西安火锅团购季均销量分布') +
+    theme(title = element_text(family = 'chineseFont', face = 'bold', size = 12)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(axis.text.x = element_text(family = 'mathFont', face = 'bold', size = 10)) + 
+    theme(axis.text.y = element_text(family = 'mathFont', face = 'bold', size = 10)) +
+    scale_x_continuous(breaks = seq(0, 10, 2))
+
+## 查看季均销量的基本统计值
+summary(hot.pot$quarterly.sales.volume)
+
+## 查看季均销量为0的数量
+sum(hot.pot$quarterly.sales.volume == 0)
+```
+
+<br/>
+
+## **TASK 3**
+
+　　分别对火锅团购上线天数和折扣力度这两个变量进行分布可视化，绘制这两个变量的频数直方图，并查看这两个变量的基本统计值。观察得到的直方图可以发现，上线天数的分布较为左偏，折扣力度的分布较为右偏，两者都不太符合正态分布。<br/>
+　　先看上线天数，频数较高的数据聚集于300附近，说明大部分火锅商店的团购已上线一年。峰值左边数据也较多，表明越来越多的火锅店开始提供团购服务。而一年以上的上线天数较少，时间越长，数据越少。由基本统计值可知，最长的团购上线时间已经达到1143天，最短的仅有1天，中位数为320.5天，与上述理论分析贴合。<br/>
+　　再看折扣力度，频数较高的数据聚集于80附近，即大部分商家的优惠为八折左右，大部分数据集中在50%~80%，表明火锅店的优惠情况比较符合市场规律，五折至八折也是日常生活中较为常见的打折力度。而小于25%的数据少之又少，这种“跳楼价”基本不太可能在现实中出现，即使存在也应该有其他限制，例如帮助商家进行宣传等限制行为。查看基本统计值，最小值为0.01429，即售价为原价的1%，查看发现，这些团购券表明的都是仅售1元，抵扣的是某些种类的食品，较为单一，一般伴随着其他消费使用。最大值为0.999，即为“九九九折”，这种团购券基本没有任何优惠的价值，仅仅是一种宣传手段或结账方式。而中位数为76%，平均值为73%，即大部分商家的折扣力度为七五折。
+
+```{r, message = F, warning = F, fig.align = 'center'}
+## 绘制上线天数的分布直方图
+ggplot(hot.pot, aes(online.intervel)) +
+    geom_histogram(binwidth = 30, fill = '#FFBFBF', color = '#FF7F7F') +
+    labs(x = '团购上线天数(天)', y = '频数', title ='西安火锅团购上线天数分布') +
+    theme(title = element_text(family = 'chineseFont', face = 'bold', size = 12)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(axis.text.x = element_text(family = 'mathFont', face = 'bold', size = 10)) + 
+    theme(axis.text.y = element_text(family = 'mathFont', face = 'bold', size = 10)) +
+    scale_x_continuous(breaks = seq(0, 1200, 300))
+
+## 查看上线天数的基本统计值
+summary(hot.pot$online.intervel)
+
+## 绘制折扣力度的分布直方图
+ggplot(hot.pot, aes(100 * discount)) +
+    geom_histogram(binwidth = 5, fill = '#FFBFBF', color = '#FF7F7F') +
+    labs(x = '团购折扣力度(%)', y = '频数', title ='西安火锅团购折扣力度分布') +
+    theme(title = element_text(family = 'chineseFont', face = 'bold', size = 12)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(axis.text.x = element_text(family = 'mathFont', face = 'bold', size = 10)) + 
+    theme(axis.text.y = element_text(family = 'mathFont', face = 'bold', size = 10)) +
+    scale_x_continuous(breaks = seq(0, 100, 25))
+
+## 查看上线天数的基本统计值
+summary(hot.pot$discount)
+```
+
+<br/>
+
+## **TASK 4**
+
+　　接下来对商家店名进行高频词统计。首先将商家店名的数据贴合为一个词汇字符串，便于统计处理。然后删除字符串中的非中文字符，这部分字符主要是数字和英文，大多数为门牌号和独特的店名，变化较多，不适用于分析。采用Rwordseg包中segmentCN函数进行中文分词，得到高频词汇表，删除高频词汇表中的一些无意义信息，例如“店”、“区”、“路”等名词。<br/>
+　　最后绘制词云如下，观察词云发现，排名较前的高频词分别为“串”、“锅”、“鱼”、“重庆”、“涮”等，已在词云中用高对比度标注，这说明西安火锅市场中较为流行的吃法是“串串”，其次与“鱼”有关的火锅店也较受青睐，“重庆”火锅也在西安比较流行。
+
+```{r, message = F, warning = F, fig.align = 'center'}
+## 合并商家店名文本并删除非中文字符
+words.line <- gsub('[0-9a-zA-Z]', '', Reduce('paste', hot.pot$merchant.name))
+
+## 统计商家店名的高频词
+words.frequency <- data.frame(table(segmentCN(words.line)))
+
+## 修改高频词表的列名
+names(words.frequency) <- c('word', 'frequency')
+
+## 删除高频词表中的无意义词组
+words.frequency <- words.frequency[-which(words.frequency[, 1] == '路' |
+                                              words.frequency[, 1] == '区' |
+                                              words.frequency[, 1] == '小区' |
+                                              words.frequency[, 1] == '总店' | 
+                                              words.frequency[, 1] == '门店' |
+                                              words.frequency[, 1] == '分店' | 
+                                              words.frequency[, 1] == '店' |
+                                              words.frequency[, 1] == '火锅'), ]
+
+## 按词频排序高频词表
+words.frequency <- words.frequency[order(words.frequency[, 2], decreasing = T), ]
+
+## 绘制商家店名的词云
+wordcloud2(words.frequency[1:500, ], size = 1.5, minSize = 0.6, gridSize = 2,
+           fontFamily = '微软雅黑', fontWeight = 'bold', shuffle = F,
+           color = ifelse(words.frequency[, 2] > 200, '#F02222', '#C09292'), 
+           backgroundColor = 'black', minRotation = -pi/2, maxRotation = pi/2,
+           rotateRatio = 0.2, shape = 'circle', ellipticity = 0.7)
+```
+
+<br/>
+
+## **TASK 5**
+
+　　然后关注团购价和节假日通用这两个变量。先观察销量与团购价的关系，对团购价格离散化为不同的50元区间，观察箱线图得到，大部分团购券的价格小于200元，数据只要集中于50-100的区间，这表明火锅店的消费水平约为50-100元，比较符合实际情况。纵向比较发现，团购价位于较低区间的销量较高，平均位于2.5的水平，而价格越高销量越低，而大于300元的区间包含了更多数据则比较反常，销量要比150-300区间的高。<br/>
+　　再观察节假日通用对销量的影响，箱线图显示，非周末节假日通用的团购券销量明显比通用券要高，但相对来说数量会较少，这表明客户还是较倾向于在非节假日进行消费。节假日通用的团购券发行较多，但会出现无人问津的情况，但离群点表明某些特殊的通用券销量也会很好。
+
+```{r, message = F, warning = F, fig.align = 'center'}
+## 离散化团购价为价格区间
+hot.pot$price.interval[hot.pot$price < 50] <- '0-50'
+hot.pot$price.interval[hot.pot$price >= 50 & hot.pot$price < 100] <- '50-100'
+hot.pot$price.interval[hot.pot$price >= 100 & hot.pot$price < 150] <- '100-150'
+hot.pot$price.interval[hot.pot$price >= 150 & hot.pot$price < 200] <- '150-200'
+hot.pot$price.interval[hot.pot$price >= 200 & hot.pot$price < 250] <- '200-250'
+hot.pot$price.interval[hot.pot$price >= 250 & hot.pot$price < 300] <- '250-300'
+hot.pot$price.interval[hot.pot$price >= 300] <- '>300'
+
+## 修改价格区间的顺序
+hot.pot$price.interval <- factor(hot.pot$price.interval, 
+                                 c('0-50', '50-100', '100-150', '150-200', '200-250', '250-300', '>300'))
+
+## 绘制团购价对销量的箱线图
+ggplot(hot.pot, aes(price.interval, log.quarterly.sales.volume)) +
+    geom_boxplot(outlier.colour = '#7F7FFF', fill = '#BFBFFF', color = '#7F7FFF', varwidth = T) +
+    labs(x = '团购价(元)', y = '对数(季均销量 + 1)', title ='火锅团购价对销量的影响') +
+    theme(title = element_text(family = 'chineseFont', face = 'bold', size = 12)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(axis.text.x = element_text(family = 'mathFont', face = 'bold', size = 10)) + 
+    theme(axis.text.y = element_text(family = 'mathFont', face = 'bold', size = 10))
+
+## 修改节假日通用的顺序
+hot.pot$if.nonworkdays.available <- factor(hot.pot$if.nonworkdays.available, 
+                                           c('周末法定节假日通用', '非周末法定节假日通用'))
+
+## 绘制节假日通用对销量的箱线图
+ggplot(hot.pot, aes(hot.pot$if.nonworkdays.available, log.quarterly.sales.volume)) +
+    geom_boxplot(outlier.colour = '#7F7FFF', fill = '#BFBFFF', color = '#7F7FFF', varwidth = T) +
+    labs(x = '是否周末法定节假日通用', y = '对数(季均销量 + 1)', title ='是否周末法定节假日通用对销量的影响') +
+    theme(title = element_text(family = 'chineseFont', face = 'bold', size = 12)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(axis.text.x = element_text(family = 'chineseFont', face = 'bold', size = 10)) + 
+    theme(axis.text.y = element_text(family = 'mathFont', face = 'bold', size = 10))
+```
+
+<br/>
+
+## **TASK 6**
+
+　　制作团购评分与销量的散点图，可以发现大部分数据聚集在右侧，即4-5分的范围内，另一方面评分为0的团购券也较多，总体上来看，评分越高，销量越高。但评分高不一定就包含智能销量高，这是因为某些小众火锅店质量很高但知名度不高。评分为0的团购券应该是客户买到团购券之后的对火锅店的反应，表明某些火锅团购的质量仍待提高。
+
+```{r, message = F, warning = F, fig.align = 'center'}
+## 绘制团购评分对销量的散点图
+ggplot(hot.pot, aes(hot.pot$'评分', log.quarterly.sales.volume)) +
+    geom_point(color = '#6FFF6F') +
+    labs(x = '评分', y = '对数(季均销量 + 1)', title ='火锅评分对销量的影响') +
+    theme(title = element_text(family = 'chineseFont', face = 'bold', size = 12)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(axis.text.x = element_text(family = 'mathFont', face = 'bold', size = 10)) + 
+    theme(axis.text.y = element_text(family = 'mathFont', face = 'bold', size = 10))
+```
+
+<br/>
+
+## **TASK 7**
+
+　　对商家店名进行进一步的分析，抽取了店名使用了人物词汇作为分类变量。绘制是否存在人物词汇对销量的影响，由箱线图可得，点名中包含人物词汇的火锅团购店的团购销量明显高于不包含的销量，这可以归结于人名的宣传效应，也让客户更具有归属感。观察数量得知，店名具有人物词汇的商家并不多，但整体水平比店名不存在人物词汇的商家要高。
+
+```{r, message = F, warning = F, fig.align = 'center'}
+## 设置人名识别分词
+segment.options(isNameRecognition = T)
+
+## 进行人名识别分词
+words <- segmentCN(hot.pot$merchant.name, nature = T)
+
+## 标记包含人名词汇的商家
+flag = ''
+for(i in 1:nrow(hot.pot))
+{
+    for(j in length(words[[i]]))
+    {
+        if(names(words[[i]][j]) == 'nr')
+        {
+            hot.pot$name[i] <- '是'
+            flag = 'r'
+        }
+        if(flag != 'r')
+        {
+            hot.pot$name[i] <- '否'
+        }
+    }
+}
+
+## 修改人名分类变量的顺序
+hot.pot$name <- factor(hot.pot$name, c('否', '是'))
+
+## 绘制人名分类变量对销量的箱线图
+ggplot(hot.pot, aes(name, log.quarterly.sales.volume)) +
+    geom_boxplot(outlier.colour = '#7F7FFF', fill = '#BFBFFF', color = '#7F7FFF', varwidth = T) +
+    labs(x = '是否包含人名词汇', y = '对数(季均销量 + 1)', title ='是否包含人名词汇对销量的影响') +
+    theme(title = element_text(family = 'chineseFont', face = 'bold', size = 12)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(axis.text.x = element_text(family = 'mathFont', face = 'bold', size = 10)) + 
+    theme(axis.text.y = element_text(family = 'mathFont', face = 'bold', size = 10))
+```
+
+<br/>
+
+## **TASK 8**
+
+　　采用团购销售的中位数9作为分类标准，将季均销量大于9的数据标记为高销量，用于下面的逻辑回归分析。
+
+```{r, message = F, warning = F, fig.align = 'center'}
+## 转换团购销量为分类因变量
+hot.pot$high.volume.interval[hot.pot$quarterly.sales.volume > 9] <- 1    ## 高销量水平
+hot.pot$high.volume.interval[hot.pot$quarterly.sales.volume <= 9] <- 0    ## 低销量水平
+
+## 提取逻辑回归所需的子数据集
+hot.pot.glm <- hot.pot[, c('high.volume.interval', 'discount', 'price', 'privilege.for.new', 
+                           'privilege.on.sale', 'district', 'if.nonworkdays.available', 
+                           'time.duration', 'if.appointment.needed', 'WiFi.available', 
+                           'parking', 'rooms.available', '评分', 'online.intervel',
+                           'level.of.participants.limited', 'level.of.tickets.limited',
+                           'place', 'food', 'taste', 'cook', 'people', 'style', 'HighFreq')]
+```
+
+<br/>
+
+## **TASK 9**
+
+　　使用glm()函数进行逻辑回归建模，查看回归结果得到结论，新客优惠、节假日通用、上线天数、人数限制等变量影响程度较大。
+
+```{r, message = F, warning = F, fig.align = 'center'}
+## 逻辑回归建模
+hot.pot.model <- glm(high.volume.interval ~ log(price) + . - price, 
+                     family = binomial(), data = hot.pot.glm)
+
+## 输出回归结果
+summary(hot.pot.model)
+```
+
+<br/>
+
+## **TASK 10**
+
+　　由以上得到的数据绘制ROC曲线，得到AUC值为0.84，这个值表明逻辑回归的效果较好，一般来说AUC值越大，回归效果越好。正例率在低负例率时较高表明模型比较准确。
+
+```{r, message = F, warning = F, fig.align = 'center'}
+## 生成预测结果数据集hot.pot.pred
+hot.pot.pred <- predict(hot.pot.model, data = hot.pot)
+
+## 计算预测概率prob
+hot.pot.glm$prob <- exp(hot.pot.pred) / (1 + exp(hot.pot.pred))
+
+## 生成prediction对象predObj
+predObj <- prediction(hot.pot.glm$prob, hot.pot.glm$high.volume.interval)
+
+## 计算ROC值hot.pot.roc
+hot.pot.roc <- performance(predObj, 'tpr', 'fpr')
+
+## 设置绘图格式
+par(font.main = 2, font.axis = 2, font.lab = 2, lwd = 2, pch = 1)
+
+## 绘制ROC曲线
+plot(hot.pot.roc, main = 'ROC曲线')
+
+## 计算AUC值
+performance(predObj, 'auc') @ y.values
+```

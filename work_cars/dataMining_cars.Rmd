@@ -1,0 +1,286 @@
+---
+title: "**数据挖掘 第一次作业**"
+author: "**邓淇升** **16307110232** **大数据学院**"
+date: "11 Mar 2019"
+output: 
+    html_document:
+        toc: yes
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "F:\\复旦大学\\课程课件\\新大二下学期\\1 数据挖掘\\Homework\\第1次作业")
+```
+
+<br/>
+
+## **TASK 1**
+
+<br/>
+设置工作路径至文件所在文件夹：
+
+```{r task1.1, echo = TRUE}
+setwd("F:\\复旦大学\\课程课件\\新大二下学期\\1 数据挖掘\\Homework\\第1次作业")    ## 设置系统工作路径
+```
+
+<br/>
+从二手车数据文件中读入数据集，命名为dat0，查看数据集的行数和列数。
+
+```{r task1.2, echo = TRUE}
+dat0 <- read.csv("cars.csv", header = T, fileEncoding = "GB2312")    ## 读入数据
+dim(dat0)    ## 12951行 19列
+```
+
+<br/>
+删除没有采集到关键变量的数据，更新为dat1。
+
+```{r task1.3, echo = TRUE}
+dat1 <- dat0[which(dat0$pailiang != -1 & dat0$paifang != -1), ]    ## 删除没有采集到排放和排量的数据
+dim(dat1)    ## 12820行 19列
+```
+
+<br/>
+进一步对数据集进行清洗，观察发现，数据集中有部分数据重复出现，删除后更新为dat2。另外，在计算保值率的公式中，原价不能为零，故应删除数据集中原价为零的数据，更新为dat3。
+
+```{r task1.4, echo = TRUE}
+dat2 <- dat1[which(duplicated.data.frame(dat1) == F), ]    ## 删除重复冗余的数据
+dat3 <- dat2[which(dat2$yuanjia != 0), ]    ## 删除原价为0的数据
+```
+
+<br/>
+
+## **TASK 2**
+
+<br/>
+利用二手车数据集中的原价与报价信息，计算汽车的保值率与对数保值比率（即Log-保值比率，下同）。将计算得到的数据并入原数据集，命名为rvi和log_rvi。(RVI: Residual Value Indicator)
+
+```{r task2.1, echo = TRUE}
+dat3$rvi <- dat3$baojia / dat3$yuanjia    ## 保值率 = 报价 / 原价 
+dat3$log_rvi <- log(dat3$baojia / (dat3$yuanjia - dat3$baojia))    ## 对数保值比率 = log(报价 / (原价 - 报价))
+```
+
+<br/>
+绘制汽车保值率和对数保值比率的**直方图**:
+
+```{r task2.2, echo = TRUE, fig.align ='center'}
+opar <- par(no.readonly = TRUE)    ## 保存绘图原格式
+par(mfrow = c(1, 2), font.main = 2, font.axis = 2, font.lab = 2, lwd = 2)    ## 设置绘图格式
+
+hist(dat3$rvi, freq = T, main = "汽车保值率直方图", col = "#7F7FFF", xlab = "保值率", ylab = "频数", xlim = c(0, 1), ylim = c(0, 1500), breaks = seq(0, 1, 0.05))    ## 保值率 直方图
+
+hist(dat3$log_rvi, freq = T, main = "汽车对数保值比率直方图", col = "#7F7FFF", xlab = "对数保值比率", ylab = "频数", xlim = c(-3, 3), ylim = c(0, 2000), breaks = seq(-5, 5, 0.25))    ## 对数保值比率 直方图
+
+par(opar)    ## 格式复位
+```
+
+<br/>
+查看保值率最高和最低的部分汽车数据：
+
+```{r task2.3, echo = TRUE}
+head(dat3[order(dat3$log_rvi), ], n = 10)    ## 查看保值率最低的10个数据
+tail(dat3[order(dat3$log_rvi), ], n = 10)    ## 查看保值率最高的10个数据
+```
+
+<br/>
+
+#### **分析解读**
+
+<br/>
+由上述数据分析得，原价的取值范围是2.8-703.4万元，报价的取值范围是0.20-375.00万元，保值率的取值范围是0.017-0.911，对数保值比率的取值范围是-4.052-2.332。直方图显示保值率数据近似于0-1正态分布，符合预测情况。
+
+<br/>
+对保值率排名最前和最后的数据进行分析，在保值率排名倒数前十的汽车中，排放标准为国二（大部分）或国三，车型偏小，原价偏低，来源多数为上汽出产的轿车，上牌时间较早，里程较长，马力和轴距较小，车辆配置较为简陋；而在保值率排名正数前十的汽车中，排放标准为国五（大部分）或国四，车型偏大，原价偏高，来源各异，上牌时间较晚，里程较短，马力和轴距偏大，车辆配置较为完善。其中保值率最低的是报价0.20万元的上汽通用别克紧凑型车，原价11.7万元，里程28.41万公里，是国三标准中级轿车；保值率最高的是报价35.0万元的北京奔驰中型车，原价38.4万元，里程1.37万公里，是国五标准中级轿车。
+
+<br/>
+将统计数据与实际情况进行比较，发现两者较为吻合。这比较符合日常认知，一般来说，较昂贵高级且使用率较低的轿车更容易在二手车市场中卖得好价钱，而较便宜且使用率较高的轿车自然会有一定程度的贬值。
+
+<br/>
+
+## **TASK 3**
+
+<br/>
+首先简要查看排放标准和排量情况：
+
+```{r task3.1, echo = TRUE}
+dat3$paifang <- factor(dat3$paifang, levels = c("国五", "国四", "国三", "国二", "国一"))    ## 调整排放标准顺序
+summary(dat3$paifang)    ## 查看排放标准情况
+summary(dat3$pailiang)    ## 查看排量情况
+```
+
+<br/>
+观察发现排放标准为国三、国二和国一的汽车数量较少，应该合并为同一个分类变量。对汽车的排量情况进行等级划分，分别划分为微型轿车、普通级轿车、中级轿车、中高级轿车和高级轿车。
+
+```{r task3.2, echo = TRUE}
+for(i in 1:nrow(dat3))
+{
+    if(dat3[i, "paifang"] == "国五")    ## 合并排放标准
+    {
+        dat3[i, "nationalState"] <- "国五"
+    }
+    else if(dat3[i, "paifang"] == "国四")
+    {
+        dat3[i, "nationalState"] <- "国四"
+    }
+    else
+    {
+        dat3[i, "nationalState"] <- "国三及以下"
+    }
+    
+    if(dat3[i, "pailiang"] < 1)    ## 对排量情况进行等级划分
+    {
+        dat3[i, "class"] <- "微型轿车"
+    }
+    else if(dat3[i, "pailiang"] >= 1 & dat3[i, "pailiang"] < 1.6)
+    {
+        dat3[i, "class"] <- "普通级轿车"
+    }
+    else if(dat3[i, "pailiang"] >= 1.6 & dat3[i, "pailiang"] < 2.5)
+    {
+        dat3[i, "class"] <- "中级轿车"
+    }
+    else if(dat3[i, "pailiang"] >= 2.5 & dat3[i, "pailiang"] < 4)
+    {
+        dat3[i, "class"] <- "中高级轿车"
+    }
+    else
+    {
+        dat3[i, "class"] <- "高级轿车"
+    }
+}
+```
+
+<br/>
+对排放标准和排量情况这两个分类变量进行顺序调整：
+
+```{r task3.3, echo = TRUE}
+dat3$nationalState <- factor(dat3$nationalState, levels = c("国五", "国四", "国三及以下"))    ## 调整排放标准顺序
+dat3$class <- factor(dat3$class, levels = c("微型轿车", "普通级轿车", "中级轿车", "中高级轿车", "高级轿车"))    ## 调整排量顺序
+```
+
+<br/>
+绘制对数保值比率关于排放标准和排量情况的**箱线图**：
+
+```{r task3.4, echo = TRUE, fig.align ='center'}
+par(font.main = 2, font.axis = 2, font.lab = 2, lwd = 2, pch = 1)    ## 设置绘图格式
+
+boxplot(dat3$log_rvi ~ dat3$nationalState, main = "对数保值比率关于排放标准的箱线图", xlab = "排放标准", ylab = "对数保值比率", col = "#FF9933")    ## 对数保值比率 - 排放标准 箱线图
+
+boxplot(dat3$log_rvi ~ dat3$class, main = "对数保值比率关于排量的箱线图", xlab = "排量", ylab = "对数保值比率", col = "#FF9933")    ## 对数保值比率 - 排量 箱线图
+
+par(opar)    ## 格式复位
+```
+
+<br/>
+
+#### **分析解读**
+
+<br/>
+上述数据显示，排放标准对保值比率有较大的影响，约75%的国五标准轿车报价仍处于原价的50%以上水平，而国四标准轿车整体的保值比率明显低于国五标准轿车，国三及以下标准轿车更低。可以得到的结论是，**不同排放标准的轿车保值比率差异明显。**其中国五标准保值比率较高，国四标准保值比率中等，国三及以下标准保值比率较低。
+
+<br/>
+而观察排量对保值比率的箱线图，发现不同排量等级的汽车保值比率差异不太明显，其中普通级轿车的平均保值比率在五类等级中最高，高级轿车的平均保值比率在五类等级中最低，微型轿车的保值比率整体较低，但保值率最高和最低的轿车均属于中级轿车，图中也表明中级轿车的保值比率较为离散，应该是因为中级轿车的用户最多，情况最复杂，容易出现极端数据。可以得到的结论是，**不同排量等级的轿车保值比率差异不太明显。**
+
+<br/>
+
+## **TASK 4**
+
+<br/>
+从处理后的二手车数据文件中读入数据集，命名为dat：
+
+```{r task4.1, echo = TRUE}
+dat <- read.csv("cars-final.csv", header = T, fileEncoding = "GB2312")    ## 读入数据
+```
+
+<br/>
+首先对数据集进行简单的清洗，删除数据集中重复出现的数据后命名为datFinal，修改数据集中的某些变量名称。
+
+```{r task4.2, echo = TRUE}
+datFinal <- dat[which(duplicated.data.frame(dat) == F), ]    ## 删除重复冗余的数据
+colnames(datFinal)[c(30, 35)] <- c("其他厂商", "一汽大众奥迪")    ## 修改变量名称
+```
+
+<br/>
+通过summary函数查看不同车型的数量，将哑变量处理为可使用的分类变量，同时将数量较少的车型合并为“其他车型”，并对车型的分类变量进行顺序调整。
+```{r task4.3, echo = TRUE}
+summary(datFinal)    ## 查看数据的统计情况
+
+for(i in 1:nrow(datFinal))    ## 处理哑变量
+{
+    if(datFinal[i, "SUV"] == 1)
+    {
+        datFinal[i, "车型"] <- "SUV"
+    }
+    else if(datFinal[i, "紧凑型车"] == 1)
+    {
+        datFinal[i, "车型"] <- "紧凑型车"
+    }
+    else if(datFinal[i, "中型车"] == 1)
+    {
+        datFinal[i, "车型"] <- "中型车"
+    }
+    else
+    {
+        datFinal[i, "车型"] <- "其他车型"
+    }
+}
+
+datFinal$"车型" <- factor(datFinal$"车型", levels = c("其他车型", "SUV", "中型车", "紧凑型车"))    ## 调整车型顺序
+```
+
+<br/>
+绘制七个主要厂商及剩下其他厂商的轿车对数保值比率对不同车型的箱线图：
+
+```{r task4.4, echo = TRUE, fig.align ='center'}
+par(mfrow = c(2, 4), font.main = 2, font.axis = 2, font.lab = 2, lwd = 1.8, pch = 1, las = 2)    ## 设置绘图格式
+
+## 各厂商的轿车对数保值比率对车型的箱线图
+boxplot(subset(datFinal, datFinal$"华晨宝马" == 1)$ratio ~ subset(datFinal, datFinal$"华晨宝马" == 1)$"车型", main = "华晨宝马", ylab = "对数保值比率", col = "#FF9933")
+
+boxplot(subset(datFinal, datFinal$"上汽大众" == 1)$ratio ~ subset(datFinal, datFinal$"上汽大众" == 1)$"车型", main = "上汽大众", ylab = "对数保值比率", col = "#FF9933")
+
+boxplot(subset(datFinal, datFinal$"上汽集团" == 1)$ratio ~ subset(datFinal, datFinal$"上汽集团" == 1)$"车型", main = "上汽集团", ylab = "对数保值比率", col = "#FF9933")
+
+boxplot(subset(datFinal, datFinal$"上汽通用别克" == 1)$ratio ~ subset(datFinal, datFinal$"上汽通用别克" == 1)$"车型", main = "上汽通用别克", ylab = "对数保值比率", col = "#FF9933")
+
+boxplot(subset(datFinal, datFinal$"上汽通用雪佛兰" == 1)$ratio ~ subset(datFinal, datFinal$"上汽通用雪佛兰" == 1)$"车型", main = "上汽通用雪佛兰", ylab = "对数保值比率", col = "#FF9933")
+
+boxplot(subset(datFinal, datFinal$"一汽大众奥迪" == 1)$ratio ~ subset(datFinal, datFinal$"一汽大众奥迪" == 1)$"车型", main = "一汽大众奥迪", ylab = "对数保值比率", col = "#FF9933")
+
+boxplot(subset(datFinal, datFinal$"长安福特" == 1)$ratio ~ subset(datFinal, datFinal$"长安福特" == 1)$"车型", main = "长安福特", ylab = "对数保值比率", col = "#FF9933")
+
+boxplot(subset(datFinal, datFinal$"其他厂商" == 1)$ratio ~ subset(datFinal, datFinal$"其他厂商" == 1)$"车型", main = "其他厂商", ylab = "对数保值比率", col = "#FF9933")
+
+par(opar)    ## 格式复位
+```
+
+<br/>
+
+#### **分析解读**
+
+<br/>
+上述数据表明了不同厂商的轿车车型对保值比率的影响。观察箱线图发现，上汽集团、上汽通用别克和上汽通用雪佛兰的二手轿车中，车型为SUV的轿车平均保值比率均为最高，推测上汽公司的主要销售方向为SUV轿车，更高质量的汽车配置使得上汽出产的SUV轿车具有较高的保值潜力。另外华晨宝马SUV轿车的保值比率同样整体较高，而长安福特不同车型的保值比率则差异较大，一汽大众奥迪不同车型的保值比率差异较小，推测一汽大众奥迪的不同车型质量近似，长安福特的不同车型质量参差不齐。其他厂商的数据则表明不同车型保值比率差异不大。
+
+<br/>
+整体来说，若观察**不同汽车厂商**，不同汽车厂商的二手车中车型对保值比率的影响存在较大差异，表明二手车保值比率会因厂商的不同而有较大影响；而若观察**不同车型**，上汽公司及长安福特二手车的不同车型对保值比率的影响差异较大，剩下其他厂商二手车的不同车型对保值比率影响差异较小。结合二者分析，**汽车生产厂商和车型对保值比率的存在较大交互影响。**
+<br/>
+
+## **TASK 5**
+
+<br/>
+由上述数据，绘制对数保值比率关于连续变量汽车里程的散点图：
+
+```{r task5, echo = TRUE, fig.align ='center'}
+plot(datFinal$licheng, datFinal$ratio, main = "汽车对数保值比率对里程的散点图", xlab = "里程", ylab = "对数保值比率", font.main = 2, font.lab = 2, font.axis = 2, lwd = 2, pch = 16, cex = 0.6)    ## 保值比率对里程的散点图
+
+par(opar)    ## 格式复位
+```
+
+<br/>
+
+#### **分析解读**
+
+<br/>
+通过绘制散点图发现，作为连续变量的汽车行驶里程对保值比率具有较大影响。由图可得，里程在15万公里处以及对数保值比率在-1.5处出现明显分界，表明二手车市场中大部分轿车里程低于15万公里，里程超过15万公里之后，对数保值比率基本均小于零，表明汽车报价约贬值为原价的一半以下；而里程未超过15万公里的轿车仍对保值比率有较大影响，里程越高，对数保值比率的最大值越低，整体越集中。但由图中可以发现里程较低的轿车保值比率仍然存在较大范围的离散，表明低里程的轿车数据差异较大。而对数保值比率在-1.5的分界表明，大部分轿车的保值比率仍处于-1.5以上的水平，出现汽车价值暴跌的情况相对较少。可以得出的结论是，**里程对汽车保值比率的影响明显**，趋势是：**里程越高，汽车保值比率整体越低但越集中，在里程为15万公里处会出现分界，里程大于15万公里的轿车保值比率较为集中。**
+
+<br/>
+<br/>
